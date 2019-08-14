@@ -7,9 +7,19 @@ import (
 	"log"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/tarm/serial"
 )
+
+type encodeMode uint8
+
+const (
+	GSM = encodeMode(iota)
+	UCS2
+)
+
+var EncodeMode encodeMode
 
 type Modem struct {
 	OOB   chan Packet
@@ -116,7 +126,13 @@ func (self *Modem) DeleteMessage(n int) error {
 }
 
 func (self *Modem) SendMessage(telephone, body string) error {
-	enc := gsmEncode(body)
+	var enc string
+	if EncodeMode == UCS2 {
+		enc = unicodeEncode(body)
+		telephone = unicodeEncode(telephone)
+	} else {
+		enc = gsmEncode(body)
+	}
 	_, err := self.sendBody("+CMGS", enc, telephone)
 	return err
 }
@@ -285,7 +301,9 @@ func formatCommand(cmd string, args ...interface{}) string {
 
 func (self *Modem) sendBody(cmd string, body string, args ...interface{}) (Packet, error) {
 	self.tx <- formatCommand(cmd, args...)
-	self.tx <- body + "\x1a"
+	time.Sleep(1 * time.Second)
+	self.tx <- body + "\x1A"
+	time.Sleep(1 * time.Second)
 	response := <-self.rx
 	if _, e := response.(ERROR); e {
 		return response, errors.New("Response was ERROR")
@@ -303,31 +321,34 @@ func (self *Modem) send(cmd string, args ...interface{}) (Packet, error) {
 }
 
 func (self *Modem) init() error {
+	self.send("")
+	time.Sleep(1 * time.Second)
 	// clear settings
-	if _, err := self.send("Z"); err != nil {
-		return err
-	}
+	self.send("Z")
 	log.Println("Reset")
-	// turn off echo
-	if _, err := self.send("E0"); err != nil {
-		return err
-	}
-	log.Println("Echo off")
-	// use combined storage (MT)
-	msg, err := self.send("+CPMS", "SM", "SM", "SM")
-	if err != nil {
-		msg, err = self.send("+CPMS", "SM", "SM")
-		if err != nil {
+	time.Sleep(1 * time.Second)
+
+	if EncodeMode == UCS2 {
+		// set character encoding to use ucs2 encoding
+		if _, err := self.send("+CSCS", "UCS2"); err != nil {
 			return err
 		}
+		log.Println("Set SMS character encoding")
+		time.Sleep(1 * time.Second)
+
+		if _, err := self.send("+CSMP", 17, 167, 0, 8); err != nil {
+			return err
+		}
+		log.Println("Set data coding schema")
+		time.Sleep(1 * time.Second)
 	}
-	sinfo := msg.(StorageInfo)
-	log.Printf("Set SMS Storage: %d/%d used\n", sinfo.UsedSpace1, sinfo.MaxSpace1)
+
 	// set SMS text mode - easiest to implement. Ignore response which is
 	// often a benign error.
 	self.send("+CMGF", 1)
-
 	log.Println("Set SMS text mode")
+	time.Sleep(1 * time.Second)
+
 	// get SMSC
 	// the modem complains if SMSC hasn't been set, but stores it correctly, so
 	// query for stored value, then send a set from the query response.
@@ -337,6 +358,8 @@ func (self *Modem) init() error {
 	}
 	smsc := r.(SMSCAddress)
 	log.Println("Got SMSC:", smsc.Args)
+	time.Sleep(1 * time.Second)
+
 	r, err = self.send("+CSCA", smsc.Args...)
 	if err != nil {
 		return err
