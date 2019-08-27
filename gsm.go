@@ -82,6 +82,22 @@ func (self *Modem) GetMessage(n int) (*Message, error) {
 	return nil, errors.New("Message not found")
 }
 
+// GetMessagePDU by index n from memory in pdu format.
+func (self *Modem) GetMessagePDU(n int) (*Message, error) {
+	self.send("+CMGF", 0)
+	time.Sleep(1 * time.Second)
+	packet, err := self.send("+CMGR", n)
+	if err != nil {
+		return nil, err
+	}
+	if msg, ok := packet.(Message); ok {
+		return &msg, nil
+	}
+	self.send("+CMGF", 1)
+	time.Sleep(1 * time.Second)
+	return nil, errors.New("Message not found")
+}
+
 // ListMessages stored in memory. Filter should be "ALL", "REC UNREAD", "REC READ", etc.
 func (self *Modem) ListMessages(filter string) (*MessageList, error) {
 	packet, err := self.send("+CMGL", filter)
@@ -190,8 +206,13 @@ func parsePacket(status, header, body string) Packet {
 	case "+CSCA":
 		return SMSCAddress{args}
 	case "+CMGR":
-		return Message{Status: args[0].(string), Telephone: args[1].(string),
-			Timestamp: parseTime(args[3].(string)), Body: body}
+		//if CMGF=0 then we just need the body in pdu format
+		if args[1] == "" {
+			return Message{Body: body}
+		} else {
+			return Message{Status: args[0].(string), Telephone: args[1].(string),
+				Timestamp: parseTime(args[3].(string)), Body: body}
+		}
 	case "+CMGL":
 		return Message{
 			Index:     args[0].(int),
