@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf16"
 
 	"io"
 )
@@ -262,3 +263,4 @@ func (self LogReadWriteCloser) Close() error {
 	log.Printf("Close() = %v\n", err)
 	return err
 }
+

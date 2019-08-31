@@ -84,17 +84,18 @@ func (self *Modem) GetMessage(n int) (*Message, error) {
 
 // GetMessagePDU by index n from memory in pdu format.
 func (self *Modem) GetMessagePDU(n int) (*Message, error) {
+	time.Sleep(1 * time.Second)
 	self.send("+CMGF", 0)
 	time.Sleep(1 * time.Second)
 	packet, err := self.send("+CMGR", n)
 	if err != nil {
 		return nil, err
 	}
+	time.Sleep(1 * time.Second)
+	self.send("+CMGF", 1)
 	if msg, ok := packet.(Message); ok {
 		return &msg, nil
 	}
-	self.send("+CMGF", 1)
-	time.Sleep(1 * time.Second)
 	return nil, errors.New("Message not found")
 }
 
@@ -388,3 +389,4 @@ func (self *Modem) init() error {
 	log.Println("Set SMSC to:", smsc.Args)
 	return nil
 }
+
