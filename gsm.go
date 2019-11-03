@@ -20,6 +20,7 @@ const (
 )
 
 var EncodeMode encodeMode
+var SMSC interface{}
 
 type Modem struct {
 	OOB   chan Packet
@@ -151,6 +152,16 @@ func (self *Modem) SendMessage(telephone, body string) error {
 		enc = gsmEncode(body)
 	}
 	_, err := self.sendBody("+CMGS", enc, telephone)
+	return err
+}
+
+func (self *Modem) SendMessagePDU(length int, body string) error {
+	time.Sleep(1 * time.Second)
+	self.send("+CMGF", 0)
+	time.Sleep(1 * time.Second)
+	_, err := self.sendBody("+CMGS", body, length)
+	time.Sleep(1 * time.Second)
+	self.send("+CMGF", 1)
 	return err
 }
 
@@ -381,7 +392,7 @@ func (self *Modem) init() error {
 	smsc := r.(SMSCAddress)
 	log.Println("Got SMSC:", smsc.Args)
 	time.Sleep(1 * time.Second)
-
+	SMSC = smsc.Args[0]
 	r, err = self.send("+CSCA", smsc.Args...)
 	if err != nil {
 		return err
