@@ -86,7 +86,7 @@ func stringsUnquotes(s string) []string {
 	return res
 }
 
-var gsm0338 map[rune]string = map[rune]string{
+var gsm0338Encode map[rune]string = map[rune]string{
 	'@':  "\x00",
 	'£':  "\x01",
 	'$':  "\x02",
@@ -117,96 +117,14 @@ var gsm0338 map[rune]string = map[rune]string{
 	'Æ':  "\x1c",
 	'æ':  "\x1d",
 	'É':  "\x1f",
-	' ':  " ",
-	'!':  "!",
-	'"':  "\"",
-	'#':  "#",
 	'¤':  "\x24",
 	'%':  "\x25",
-	'&':  "&",
-	'\'': "'",
-	'(':  "(",
-	')':  ")",
-	'*':  "*",
-	'+':  "+",
-	',':  ",",
-	'-':  "-",
-	'.':  ".",
-	'/':  "/",
-	'0':  "0",
-	'1':  "1",
-	'2':  "2",
-	'3':  "3",
-	'4':  "4",
-	'5':  "5",
-	'6':  "6",
-	'7':  "7",
-	'8':  "8",
-	'9':  "9",
-	':':  ":",
-	';':  ";",
-	'<':  "<",
-	'=':  "=",
-	'>':  ">",
-	'?':  "?",
 	'¡':  "\x40",
-	'A':  "A",
-	'B':  "B",
-	'C':  "C",
-	'D':  "D",
-	'E':  "E",
-	'F':  "F",
-	'G':  "G",
-	'H':  "H",
-	'I':  "I",
-	'J':  "J",
-	'K':  "K",
-	'L':  "L",
-	'M':  "M",
-	'N':  "N",
-	'O':  "O",
-	'P':  "P",
-	'Q':  "Q",
-	'R':  "R",
-	'S':  "S",
-	'T':  "T",
-	'U':  "U",
-	'V':  "V",
-	'W':  "W",
-	'X':  "X",
-	'Y':  "Y",
-	'Z':  "Z",
 	'Ä':  "\x5b",
 	'Ö':  "\x5c",
 	'Ñ':  "\x5d",
 	'Ü':  "\x5e",
 	'§':  "\x5f",
-	'a':  "a",
-	'b':  "b",
-	'c':  "c",
-	'd':  "d",
-	'e':  "e",
-	'f':  "f",
-	'g':  "g",
-	'h':  "h",
-	'i':  "i",
-	'j':  "j",
-	'k':  "k",
-	'l':  "l",
-	'm':  "m",
-	'n':  "n",
-	'o':  "o",
-	'p':  "p",
-	'q':  "q",
-	'r':  "r",
-	's':  "s",
-	't':  "t",
-	'u':  "u",
-	'v':  "v",
-	'w':  "w",
-	'x':  "x",
-	'y':  "y",
-	'z':  "z",
 	'ä':  "\x7b",
 	'ö':  "\x7c",
 	'ñ':  "\x7d",
@@ -224,15 +142,90 @@ var gsm0338 map[rune]string = map[rune]string{
 	'~':  "\x1b=",
 }
 
+var gsm0338Decode map[rune]rune = map[rune]rune{
+	'\x00': '@',
+	'\x01': '£',
+	'\x02': '$',
+	'\x03': '¥',
+	'\x04': 'è',
+	'\x05': 'é',
+	'\x06': 'ù',
+	'\x07': 'ì',
+	'\x08': 'ò',
+	'\x09': 'Ç',
+	'\x0a': '\r',
+	'\x0b': 'Ø',
+	'\x0c': 'ø',
+	'\x0d': '\n',
+	'\x0e': 'Å',
+	'\x0f': 'å',
+	'\x10': 'Δ',
+	'\x11': '_',
+	'\x12': 'Φ',
+	'\x13': 'Γ',
+	'\x14': 'Λ',
+	'\x15': 'Ω',
+	'\x16': 'Π',
+	'\x17': 'Ψ',
+	'\x18': 'Σ',
+	'\x19': 'Θ',
+	'\x1a': 'Ξ',
+	'\x1c': 'Æ',
+	'\x1d': 'æ',
+	'\x1f': 'É',
+	'\x24': '¤',
+	'\x25': '%',
+	'\x40': '¡',
+	'\x5b': 'Ä',
+	'\x5c': 'Ö',
+	'\x5d': 'Ñ',
+	'\x5e': 'Ü',
+	'\x5f': '§',
+	'\x7b': 'ä',
+	'\x7c': 'ö',
+	'\x7d': 'ñ',
+	'\x7e': 'ü',
+	'\x7f': 'à',
+	// escaped characters
+	// '\x1be': '€',
+	// '\x1b<': '[',
+	// '\x1b/': '\\',
+	// '\x1b>': ']',
+	// '\x1b^': '^',
+	// '\x1b(': '{',
+	// '\x1b@': '|',
+	// '\x1b)': '}',
+	// '\x1b=': '~',
+}
+
 // Encode the string to GSM03.38
 func gsmEncode(s string) string {
 	res := ""
 	for _, c := range s {
-		if d, ok := gsm0338[c]; ok {
+		if d, ok := gsm0338Encode[c]; ok {
 			res += string(d)
+		} else {
+			res += string(c)
 		}
 	}
 	return res
+}
+
+// Decode the GSM03.38 to string
+func gsmDecode(s string) string {
+	res := ""
+	for _, c := range s {
+		if d, ok := gsm0338Decode[c]; ok {
+			res += string(d)
+		} else {
+			res += string(c)
+		}
+	}
+	return res
+}
+
+func Decode(s string) string {
+	return gsmDecode(s)
 }
 
 // Encode the string to unicode
@@ -263,4 +256,3 @@ func (self LogReadWriteCloser) Close() error {
 	log.Printf("Close() = %v\n", err)
 	return err
 }
-

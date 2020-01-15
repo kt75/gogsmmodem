@@ -5,7 +5,9 @@ import (
 	"errors"
 	"io"
 	"log"
+	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,7 +22,8 @@ const (
 )
 
 var EncodeMode encodeMode
-var SMSC interface{}
+var SMSCGsm interface{}
+var SMSCUcs2 interface{}
 
 type Modem struct {
 	OOB   chan Packet
@@ -149,7 +152,7 @@ func (self *Modem) SendMessage(telephone, body string) error {
 		enc = unicodeEncode(body)
 		telephone = unicodeEncode(telephone)
 	} else {
-		enc = gsmEncode(body)
+		enc = body
 	}
 	_, err := self.sendBody("+CMGS", enc, telephone)
 	return err
@@ -226,14 +229,25 @@ func parsePacket(status, header, body string) Packet {
 				Timestamp: parseTime(args[3].(string)), Body: body}
 		}
 	case "+CMGL":
-		return Message{
-			Index:     args[0].(int),
-			Status:    args[1].(string),
-			Telephone: args[2].(string),
-			Timestamp: parseTime(args[4].(string)),
-			Body:      body,
-			Last:      status != "",
+		if reflect.TypeOf(args[2]).String() == "int" {
+			return Message{
+				Index:     args[0].(int),
+				Status:    args[1].(string),
+				Telephone: strconv.Itoa(args[2].(int)),
+				Body:      body,
+				Last:      status != "",
+			}
+		} else {
+			return Message{
+				Index:     args[0].(int),
+				Status:    args[1].(string),
+				Telephone: args[2].(string),
+				Timestamp: parseTime(args[4].(string)),
+				Body:      body,
+				Last:      status != "",
+			}
 		}
+
 	case "+CPMS":
 		s := uargs
 		if strings.HasPrefix(s, "(") {
@@ -362,17 +376,20 @@ func (self *Modem) init() error {
 	time.Sleep(1 * time.Second)
 
 	if EncodeMode == UCS2 {
-		// set character encoding to use ucs2 encoding
-		if _, err := self.send("+CSCS", "UCS2"); err != nil {
+		err := self.setSMSC(GSM)
+		if err != nil {
 			return err
 		}
-		log.Println("Set SMS character encoding")
 		time.Sleep(1 * time.Second)
-
-		if _, err := self.send("+CSMP", 17, 167, 0, 8); err != nil {
+		err = self.ChangeToUCS2()
+		if err != nil {
 			return err
 		}
-		log.Println("Set data coding schema")
+		time.Sleep(1 * time.Second)
+	} else {
+		self.ChangeToUCS2()
+		time.Sleep(1 * time.Second)
+		self.ChangeToGSM()
 		time.Sleep(1 * time.Second)
 	}
 
@@ -382,17 +399,27 @@ func (self *Modem) init() error {
 	log.Println("Set SMS text mode")
 	time.Sleep(1 * time.Second)
 
-	// get SMSC
-	// the modem complains if SMSC hasn't been set, but stores it correctly, so
-	// query for stored value, then send a set from the query response.
+	//set delivery
+	self.send("+CNMI", 2, 2, 0, 1, 0)
+	log.Println("Set SMS delivery")
+	time.Sleep(1 * time.Second)
+
+	return nil
+}
+
+func (self *Modem) setSMSC(encode encodeMode) error {
 	r, err := self.send("+CSCA?")
 	if err != nil {
 		return err
 	}
 	smsc := r.(SMSCAddress)
-	log.Println("Got SMSC:", smsc.Args)
+	log.Println("Got SMSC: ", smsc.Args)
 	time.Sleep(1 * time.Second)
-	SMSC = smsc.Args[0]
+	if encode == UCS2 {
+		SMSCUcs2 = smsc.Args[0]
+	} else {
+		SMSCGsm = smsc.Args[0]
+	}
 	r, err = self.send("+CSCA", smsc.Args...)
 	if err != nil {
 		return err
@@ -401,3 +428,42 @@ func (self *Modem) init() error {
 	return nil
 }
 
+func (self *Modem) ChangeToUCS2() error {
+	EncodeMode = UCS2
+	if _, err := self.send("+CSCS", "UCS2"); err != nil {
+		return err
+	}
+	log.Println("Set SMS character encoding")
+	time.Sleep(1 * time.Second)
+
+	if _, err := self.send("+CSMP", 49, 167, 0, 8); err != nil {
+		return err
+	}
+	log.Println("Set data coding schema")
+	time.Sleep(1 * time.Second)
+	err := self.setSMSC(UCS2)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (self *Modem) ChangeToGSM() error {
+	EncodeMode = GSM
+	if _, err := self.send("+CSCS", "GSM"); err != nil {
+		return err
+	}
+	log.Println("Set SMS character encoding")
+	time.Sleep(1 * time.Second)
+
+	if _, err := self.send("+CSMP", 49, 167, 0, 0); err != nil {
+		return err
+	}
+	log.Println("Set data coding schema")
+	time.Sleep(1 * time.Second)
+	err := self.setSMSC(GSM)
+	if err != nil {
+		return err
+	}
+	return nil
+}
