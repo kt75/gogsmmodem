@@ -178,6 +178,7 @@ func lineChannel(r io.Reader) chan string {
 			if line == "" {
 				continue
 			}
+			log.Println("ret <- line")
 			ret <- line
 		}
 	}()
@@ -299,6 +300,7 @@ func (self *Modem) listen() {
 	for {
 		select {
 		case line := <-in:
+			log.Println("case line := <-in")
 			if line == echo {
 				continue // ignore echo of command
 			} else if last != "" && startsWith(line, last) {
@@ -321,18 +323,33 @@ func (self *Modem) listen() {
 				// raw mode for body
 			} else {
 				// OOB packet
+				log.Println("OOB packet")
+				log.Println("line", line)
+				log.Println("header", header)
 				p := parsePacket("OK", line, "")
 				if p != nil {
-					self.OOB <- p
+					log.Println("self.OOB <- p", p)
+					// self.OOB <- p
 				}
 			}
 		case line := <-self.tx:
+			log.Println("**listen**")
 			m := reQuestion.FindStringSubmatch(line)
 			if len(m) > 0 {
 				last = m[1]
 			}
 			echo = strings.TrimRight(line, "\r\n")
 			self.port.Write([]byte(line))
+			// //channel for timeout process
+			// c1 := make(chan string, 1)
+			// go func() {
+			// 	self.port.Write([]byte(line))
+			// 	c1 <- ""
+			// }()
+			// select {
+			// case <-c1:
+			// case <-time.After(10 * time.Second):
+			// }
 		}
 	}
 }
